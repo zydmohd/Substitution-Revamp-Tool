@@ -121,6 +121,6 @@ SELECT
 FROM
   C
 WHERE
-  Forecast_Date >= date_sub(current_date, 3)
+  Forecast_Date >= current_date
 ORDER BY
   HFW
