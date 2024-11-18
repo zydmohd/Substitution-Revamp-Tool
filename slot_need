@@ -1,5 +1,6 @@
-WITH C AS (
-  WITH B AS (
+WITH EE AS(
+WITH DD AS(
+  WITH B AS(
     WITH A AS (
       SELECT
         pffk.hellofresh_week AS HFW,
@@ -26,13 +27,13 @@ WITH C AS (
     B.Forecast_Date,
     B.Production_day,
     B.Production_Date,
-    --B.size,
+    B.size,
     B.slot_number,
-    --B.meals_to_deliver,
+    B.meals_to_deliver,
     C.recipe_name,
     C.sku_code,
     C.display_name,
-    sum(B.meals_to_deliver * C.picks) As sku_quantity
+    C.picks --sum(B.meals_to_deliver * C.picks) As sku_quantity
   FROM
     B
     JOIN (
@@ -100,27 +101,58 @@ WITH C AS (
     AND C.picks_index = B.slot_number
     And C.hf_week = B.HFW
     AND C.region_code = "FR" --AND B.HFW LIKE "2024-W26"
-  GROUP BY
-    B.HFW,
-    B.slot_number,
-    C.recipe_name,
-    B.forecast_date,
-    C.sku_code,
-    C.display_name,
-    B.Production_day,
-    B.Production_Date
 )
 SELECT
-  C.HFW,
-  C.Forecast_Date,
-  C.Slot_number,
-  C.recipe_name,
-  C.sku_code,
-  C.display_name,
-  C.sku_quantity
+  DD.*,
+  CASE
+    WHEN DD.size = 2 THEN DD.meals_to_deliver
+    ELSE 0
+  END AS size_2_meals,
+  CASE
+    WHEN DD.size = 2 THEN DD.meals_to_deliver * DD.picks
+    ELSE 0
+  END AS size_2_qty,
+  CASE
+    WHEN DD.size = 3 THEN DD.meals_to_deliver
+    ELSE 0
+  END AS size_3_meals,
+  CASE
+    WHEN DD.size = 3 THEN DD.meals_to_deliver * DD.picks
+    ELSE 0
+  END AS size_3_qty,
+  CASE
+    WHEN DD.size = 4 THEN DD.meals_to_deliver
+    ELSE 0
+  END AS size_4_meals,
+  CASE
+    WHEN DD.size = 4 THEN DD.meals_to_deliver * DD.picks
+    ELSE 0
+  END AS size_4_qty
 FROM
-  C
-WHERE
-  Forecast_Date >= current_date
-ORDER BY
-  HFW
+  DD
+)
+
+SELECT
+  EE.HFW,
+  EE.Forecast_Date,
+  EE.slot_number,
+  EE.recipe_name,
+  EE.sku_code,
+  EE.display_name,
+  SUM(EE.size_2_meals) AS size_2_meals ,
+  SUM(EE.size_2_qty) AS size_2_qty,
+  SUM(EE.size_3_meals) AS size_3_meals,
+  SUM(EE.size_3_qty) AS size_3_qty,
+  SUM(EE.size_4_meals) AS size_4_meals,
+  SUM( EE.size_4_qty) AS size_4_qty
+FROM EE
+WHERE EE.Forecast_Date >= date_sub(current_date(),7)
+GROUP BY
+  EE.HFW,
+  EE.Forecast_Date,
+  EE.slot_number,
+  EE.recipe_name,
+  EE.sku_code,
+  EE.display_name
+
+ORDER BY EE.HFW DESC
