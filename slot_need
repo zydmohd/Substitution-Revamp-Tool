@@ -1,0 +1,126 @@
+WITH C AS (
+  WITH B AS (
+    WITH A AS (
+      SELECT
+        pffk.hellofresh_week AS HFW,
+        pffk.forecast_date AS Forecast_Date,
+        --'T-' || pffk.weekout AS Weekout,
+        pffk.day_name_production AS Production_Day,
+        pffk.day_production As Production_Date,
+        pffk.size,
+        pffk.slot_number,
+        pffk.meals_to_deliver AS meals_to_deliver,
+        MAX(pffk.forecast_date) over(PARTITION BY pffk.hellofresh_week) AS Max_Forecast_Date
+      FROM
+        public_france.forecast_kitdata AS pffk
+    )
+    SELECT
+      *
+    FROM
+      A
+    WHERE
+      A.Max_Forecast_Date = A.Forecast_Date
+  )
+  SELECT
+    B.HFW,
+    B.Forecast_Date,
+    B.Production_day,
+    B.Production_Date,
+    --B.size,
+    B.slot_number,
+    --B.meals_to_deliver,
+    C.recipe_name,
+    C.sku_code,
+    C.display_name,
+    sum(B.meals_to_deliver * C.picks) As sku_quantity
+  FROM
+    B
+    JOIN (
+      -- Revision on materialized_views.isa_consolidated_picklist  for picks_index>9000 AND picks_index<9099 (Slots) that they have duplicate family name because of glbal price testing , Tests shows problems starts on 2024-W14 and may continue atleast to week 24
+      WITH AAA AS(
+        SELECT
+          picks_index,
+          sku_code,
+          hf_week,
+          box_size,
+          picks,
+          region_code,
+          recipe_name,
+          display_name
+        FROM
+          materialized_views.isa_consolidated_picklist
+        WHERE
+          region_code = "FR"
+          AND hf_week >= "2024-W14"
+          AND (
+            picks_index NOT BETWEEN 9001
+            AND 9098
+          )
+        UNION
+          (
+            SELECT
+              DISTINCT picks_index,
+              sku_code,
+              hf_week,
+              box_size,
+              picks,
+              region_code,
+              recipe_name,
+              display_name
+            FROM
+              materialized_views.isa_consolidated_picklist
+            WHERE
+              region_code = "FR"
+              AND hf_week >= "2024-W14"
+              AND picks_index > 9000
+              AND picks_index < 9099
+          )
+      )
+      SELECT
+        *
+      FROM
+        AAA
+      UNION(
+          SELECT
+            picks_index,
+            sku_code,
+            hf_week,
+            box_size,
+            picks,
+            region_code,
+            recipe_name,
+            display_name
+          FROM
+            materialized_views.isa_consolidated_picklist
+          WHERE
+            region_code = "FR"
+            AND hf_week < "2024-W14"
+        )
+    ) AS C ON C.box_size = B.size
+    AND C.picks_index = B.slot_number
+    And C.hf_week = B.HFW
+    AND C.region_code = "FR" --AND B.HFW LIKE "2024-W26"
+  GROUP BY
+    B.HFW,
+    B.slot_number,
+    C.recipe_name,
+    B.forecast_date,
+    C.sku_code,
+    C.display_name,
+    B.Production_day,
+    B.Production_Date
+)
+SELECT
+  C.HFW,
+  C.Forecast_Date,
+  C.Slot_number,
+  C.recipe_name,
+  C.sku_code,
+  C.display_name,
+  C.sku_quantity
+FROM
+  C
+WHERE
+  Forecast_Date >= date_sub(current_date, 3)
+ORDER BY
+  HFW
